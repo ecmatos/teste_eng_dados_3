@@ -1,0 +1,6 @@
+# environment variables files
+.env
+.env.*
+*.env
+docker-compose.env
+!.env.example
