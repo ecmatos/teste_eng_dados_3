@@ -1,17 +1,29 @@
 resource "aws_s3_bucket" "raw" {
   bucket = "${var.project_name}-${var.environment}-raw"
+  
+  # Only for development purposes
+  force_destroy = true
 }
 
 resource "aws_s3_bucket" "bronze" {
   bucket = "${var.project_name}-${var.environment}-bronze"
+  
+  # Only for development purposes
+  force_destroy = true
 }
 
 resource "aws_s3_bucket" "silver" {
   bucket = "${var.project_name}-${var.environment}-silver"
+
+  # Only for development purposes
+  force_destroy = true
 }
 
 resource "aws_s3_bucket" "gold" {
   bucket = "${var.project_name}-${var.environment}-gold"
+
+  # Only for development purposes
+  force_destroy = true
 }
 
 resource "aws_s3_object" "clientes_raw_csv" {
