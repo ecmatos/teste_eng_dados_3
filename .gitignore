@@ -32,3 +32,31 @@ override.tf.json
 # CLI config
 .terraformrc
 terraform.rc
+
+# ======== Spark ========
+# Parquet files
+*.parquet
+
+# Snappy compression files
+*.snappy
+*.snappy.parquet
+
+# Spark output directories
+*_spark_metadata/
+_metadata/
+_common_metadata/
+
+# Partitioned data folders
+anomesdia=*/
+
+# Bronze / Silver local outputs
+bronze/
+silver/
+
+# Hadoop / Spark temp files
+.tmp/
+.sparkStaging/
+
+# ======== Jupyter ========
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
