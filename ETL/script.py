@@ -2,14 +2,17 @@
 Module for ETL process of client data from raw CSV to Bronze and Silver layers using PySpark.
 """
 
-from pyspark.sql import SparkSession, DataFrame
-from pyspark.sql.types import (StructType, StructField, StringType, IntegerType, TimestampType, DateType, DecimalType)
-from pyspark.sql import functions as F
-from pyspark.sql.window import Window
-from datetime import datetime
-import logging
 import os
+import logging
 from enum import Enum
+from datetime import datetime
+from pyspark.sql.window import Window
+from pyspark.sql import functions as F
+from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql.types import (
+    StructType, StructField, StringType, 
+    IntegerType, TimestampType, DateType, 
+    DecimalType)
 
 
 class ETLConfig:
@@ -31,7 +34,6 @@ class ETLConfig:
 
     SHUFFLE_PARTITIONS = 8
     DEFAULT_PARALLELISM = 8
-
 
 
 class TableSchemas(Enum):
@@ -117,6 +119,22 @@ class DataReader:
         return self.spark.read.option("header", True).parquet(path)
 
 
+class DataWriter:
+    """
+    Class for writing Spark DataFrames to target formats and locations.
+    """
+
+    @staticmethod
+    def write(df: DataFrame, path: str, partition_col: str):
+        """
+        Write a DataFrame to a specified path in a given format.
+        :param df: DataFrame to write
+        :param path: Path to write the DataFrame
+        :param partition_col: Column to partition by
+        """
+
+        df.write.mode("append").partitionBy(partition_col).parquet(path)
+
 
 def add_partition_column(df, processing_date):
     """
@@ -135,18 +153,6 @@ def transform_bronze(df):
         .withColumn("nm_cliente", F.upper(F.col("nm_cliente")))
         .withColumnRenamed("telefone_cliente", "num_telefone_cliente")
     )
-
-
-def save_data(df, partition_col, path):
-    """
-    Save a DataFrame to a specified path in Parquet format, partitioned by a given column.
-    :param df: DataFrame to save
-    :param partition_col: Column to partition by
-    :param path: Path to save the DataFrame
-    """
-    
-    print("Saving data to {}".format(path))
-    df.repartition(8).coalesce(4).write.mode("append").partitionBy(partition_col).parquet(path)
 
 
 def transform_silver(df):
@@ -221,13 +227,13 @@ def main():
     df_bronze = transform_bronze(df_raw)
     df_bronze = empty_df.unionByName(df_bronze)
     df_bronze = add_partition_column(df_bronze, processing_date)
-    save_data(df_bronze, "anomesdia", ETLConfig.BRONZE_PATH)
+    DataWriter.write(df_bronze, ETLConfig.BRONZE_PATH, "anomesdia")
 
     df_silver = reader.read_parquet(ETLConfig.BRONZE_PATH)
 
     df_silver = transform_silver(df_silver)
     df_silver = add_partition_column(df_silver, processing_date)
-    save_data(df_silver, "anomesdia", ETLConfig.SILVER_PATH)
+    DataWriter.write(df_silver, ETLConfig.SILVER_PATH, "anomesdia")
 
     spark.stop()
 
