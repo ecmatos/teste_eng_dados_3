@@ -12,18 +12,26 @@ import os
 from enum import Enum
 
 
-BUCKET_RAW_NAME = "itau-de-case-dev-raw"
-BUCKET_BRONZE_NAME = "itau-de-case-dev-bronze"
-BUCKET_SILVER_NAME = "itau-de-case-dev-silver"
-BUCKET_GOLD_NAME = "itau-de-case-dev-gold"
+class ETLConfig:
+    """
+    Configuration class for ETL process.
+    """
 
-CLIENTS_CSV_FILE_NAME = "clientes_sinteticos.csv"
-TABLE_CLIENTS_BRONZE_NAME = "tabela_cliente_landing"
-TABLE_CLIENTS_SILVER_NAME = "tb_cliente"
+    APP_NAME = "etl_clientes"
 
-INPUT_PATH = "s3a://{}/{}".format(BUCKET_RAW_NAME, CLIENTS_CSV_FILE_NAME)
-BRONZE_PATH = "s3a://{}/{}".format(BUCKET_BRONZE_NAME, TABLE_CLIENTS_BRONZE_NAME)
-SILVER_PATH = "s3a://{}/{}".format(BUCKET_SILVER_NAME, TABLE_CLIENTS_SILVER_NAME)
+    BUCKET_RAW = "itau-de-case-dev-raw"
+    BUCKET_BRONZE = "itau-de-case-dev-bronze"
+    BUCKET_SILVER = "itau-de-case-dev-silver"
+
+    CLIENTS_FILE_NAME = "clientes_sinteticos.csv"
+
+    RAW_PATH = "s3a://{}/{}".format(BUCKET_RAW, CLIENTS_FILE_NAME)
+    BRONZE_PATH = "s3a://{}/tabela_cliente_landing".format(BUCKET_BRONZE)
+    SILVER_PATH = "s3a://{}/tb_cliente".format(BUCKET_SILVER)
+
+    SHUFFLE_PARTITIONS = 8
+    DEFAULT_PARALLELISM = 8
+
 
 
 class TableSchemas(Enum):
@@ -68,10 +76,10 @@ def get_spark_session():
 
     return (
         SparkSession.builder
-        .appName("etl_clientes")
+        .appName(ETLConfig.APP_NAME)
         .master("spark://{}:{}".format(os.environ['SPARK_MASTER_HOST'], os.environ['SPARK_MASTER_PORT']))
-        .config("spark.sql.shuffle.partitions", "8")
-        .config("spark.default.parallelism", "8")
+        .config("spark.sql.shuffle.partitions", ETLConfig.SHUFFLE_PARTITIONS)
+        .config("spark.default.parallelism", ETLConfig.DEFAULT_PARALLELISM)
         # Hadoop AWS
         .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
         .config("spark.hadoop.fs.s3a.aws.credentials.provider", "com.amazonaws.auth.DefaultAWSCredentialsProviderChain")
@@ -223,18 +231,18 @@ def main():
     empty_df = spark.createDataFrame(spark.sparkContext.emptyRDD(), TableSchemas.BRONZE_CLIENTS_SCHEMA.value)
 
     print("Reading raw data")
-    df_raw = read_csv(spark, INPUT_PATH)
+    df_raw = read_csv(spark, ETLConfig.RAW_PATH)
 
     df_bronze = transform_bronze(df_raw)
     df_bronze = empty_df.unionByName(df_bronze)
     df_bronze = add_partition_column(df_bronze, processing_date)
-    save_data(df_bronze, "anomesdia", BRONZE_PATH)
+    save_data(df_bronze, "anomesdia", ETLConfig.BRONZE_PATH)
 
-    df_silver = read_source(spark, BRONZE_PATH, "parquet")
+    df_silver = read_source(spark, ETLConfig.BRONZE_PATH, "parquet")
 
     df_silver = transform_silver(df_silver)
     df_silver = add_partition_column(df_silver, processing_date)
-    save_data(df_silver, "anomesdia", SILVER_PATH)
+    save_data(df_silver, "anomesdia", ETLConfig.SILVER_PATH)
 
     spark.stop()
 
