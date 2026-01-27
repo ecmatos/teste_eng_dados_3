@@ -136,6 +136,64 @@ class DataWriter:
         df.write.mode("append").partitionBy(partition_col).parquet(path)
 
 
+class BronzeTransformations:
+    """
+    Class for Bronze layer transformations.
+    """
+
+    @staticmethod
+    def apply(df: DataFrame) -> DataFrame:
+        """
+        Apply Bronze layer transformations to the DataFrame.
+        :param df: DataFrame to transform
+        :return: Transformed DataFrame
+        """
+
+        return (
+            df
+            .withColumn("nm_cliente", F.upper(F.col("nm_cliente")))
+            .withColumnRenamed("telefone_cliente", "num_telefone_cliente")
+        )
+
+
+class SilverTransformations:
+    """
+    Class for Silver layer transformations.
+    """
+
+    PHONE_REGEX = r"^\(\d{2}\)\d{5}-\d{4}$"
+
+    @staticmethod
+    def apply(df: DataFrame) -> DataFrame:
+        
+        window_spec = (
+            Window
+            .partitionBy("cod_cliente")
+            .orderBy(F.col("dt_atualizacao").desc())
+        )
+
+        df_deduplicated = (
+            df
+            .withColumn("row_num", F.row_number().over(window_spec))
+            .filter(F.col("row_num") == 1)
+            .drop("row_num")
+        )
+
+        return (
+            df_deduplicated
+            .withColumn(
+                "num_telefone_cliente",
+                F.when(
+                    F.col("num_telefone_cliente").rlike(SilverTransformations.PHONE_REGEX),
+                    F.col("num_telefone_cliente")
+                ).otherwise(F.lit(None))
+            )
+            .withColumn("dt_nascimento_cliente", F.to_date(F.col("dt_nascimento_cliente"), "yyyy-MM-dd"))
+            .withColumn("dt_atualizacao", F.to_timestamp(F.col("dt_atualizacao")))
+            .withColumn("vl_renda", F.col("vl_renda").cast("decimal(15,2)"))
+        )
+
+
 def add_partition_column(df, processing_date):
     """
     Add a partition column 'anomesdia' to the DataFrame based on the processing date.
@@ -145,69 +203,6 @@ def add_partition_column(df, processing_date):
     """
 
     return df.withColumn("anomesdia", F.lit(processing_date))
-
-
-def transform_bronze(df):
-    return (
-        df
-        .withColumn("nm_cliente", F.upper(F.col("nm_cliente")))
-        .withColumnRenamed("telefone_cliente", "num_telefone_cliente")
-    )
-
-
-def transform_silver(df):
-    """
-    Apply Silver layer transformations:
-    - Deduplicate by cod_cliente keeping the most recent record
-    - Validate phone number format
-    - Cast columns to semantic data types
-    :param df: DataFrame to transform
-    :return: Transformed DataFrame
-    """
-
-    window_spec = (
-        Window
-        .partitionBy("cod_cliente")
-        .orderBy(F.col("dt_atualizacao").desc())
-    )
-
-    df_dedup = (
-        df
-        .withColumn("row_num", F.row_number().over(window_spec))
-        .filter(F.col("row_num") == 1)
-        .drop("row_num")
-    )
-
-    phone_regex = r"^\(\d{2}\)\d{5}-\d{4}$"
-
-    df_validated = (
-        df_dedup
-        .withColumn(
-            "num_telefone_cliente",
-            F.when(
-                F.col("num_telefone_cliente").rlike(phone_regex),
-                F.col("num_telefone_cliente")
-            ).otherwise(F.lit(None))
-        )
-    )
-
-    final_silver = (
-        df_validated
-        .withColumn(
-            "dt_nascimento_cliente",
-            F.to_date(F.col("dt_nascimento_cliente"), "yyyy-MM-dd")
-        )
-        .withColumn(
-            "dt_atualizacao",
-            F.to_timestamp(F.col("dt_atualizacao"))
-        )
-        .withColumn(
-            "vl_renda",
-            F.col("vl_renda").cast("decimal(15,2)")
-        )
-    )
-
-    return final_silver
 
 
 def main():
@@ -224,14 +219,14 @@ def main():
     print("Reading raw data")
     df_raw = reader.read_csv(ETLConfig.RAW_PATH)
 
-    df_bronze = transform_bronze(df_raw)
+    df_bronze = BronzeTransformations.apply(df_raw)
     df_bronze = empty_df.unionByName(df_bronze)
     df_bronze = add_partition_column(df_bronze, processing_date)
     DataWriter.write(df_bronze, ETLConfig.BRONZE_PATH, "anomesdia")
 
     df_silver = reader.read_parquet(ETLConfig.BRONZE_PATH)
 
-    df_silver = transform_silver(df_silver)
+    df_silver = SilverTransformations.apply(df_silver)
     df_silver = add_partition_column(df_silver, processing_date)
     DataWriter.write(df_silver, ETLConfig.SILVER_PATH, "anomesdia")
 
