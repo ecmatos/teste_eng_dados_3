@@ -14,6 +14,20 @@ from pyspark.sql.types import (
     DecimalType)
 
 
+def setup_logger() -> logging.Logger:
+    """
+    Set up and return a logger for the ETL process.
+    :return: Configured logger
+    """
+    
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    
+    return logging.getLogger("etl_clientes")
+
 class ETLConfig:
     """
     Configuration class for ETL process.
@@ -174,6 +188,7 @@ class ETLOrchestrator:
     """
 
     def __init__(self):
+        self.logger = setup_logger()
         self.spark = SparkSessionFactory.create()
         self.reader = DataReader(spark=self.spark)
 
@@ -182,22 +197,42 @@ class ETLOrchestrator:
         Execute the ETL process.
         """
 
-        processing_date = datetime.now().strftime("%Y-%m-%d")
+        self.logger.info("Starting ETL process")
 
-        print("Reading raw data")
-        df_raw = self.reader.read_csv(ETLConfig.RAW_PATH)
+        try:
+            processing_date = datetime.now().strftime("%Y-%m-%d")
+            self.logger.info("Processing date: {}".format(processing_date))
 
-        df_bronze = BronzeTransformations.apply(df_raw)
-        df_bronze = df_bronze.withColumn(ETLConfig.PARTITION_COLUMN, F.lit(processing_date))
-        DataWriter.write(df_bronze, ETLConfig.BRONZE_PATH, ETLConfig.PARTITION_COLUMN)
+            self.logger.info("Reading raw data from {}".format(ETLConfig.RAW_PATH))
+            df_raw = self.reader.read_csv(ETLConfig.RAW_PATH)
+            self.logger.info("Raw record count: {}".format(df_raw.count()))
 
-        df_bronze_source = self.reader.read_parquet(ETLConfig.BRONZE_PATH)
+            self.logger.info("Applying Bronze transformations")
+            df_bronze = BronzeTransformations.apply(df_raw)
+            df_bronze = df_bronze.withColumn(ETLConfig.PARTITION_COLUMN, F.lit(processing_date))
 
-        df_silver = SilverTransformations.apply(df_bronze_source)
-        df_silver = df_silver.withColumn(ETLConfig.PARTITION_COLUMN, F.lit(processing_date))
-        DataWriter.write(df_silver, ETLConfig.SILVER_PATH, ETLConfig.PARTITION_COLUMN)
+            self.logger.info("Writing Bronze data to {}".format(ETLConfig.BRONZE_PATH))
+            DataWriter.write(df_bronze, ETLConfig.BRONZE_PATH, ETLConfig.PARTITION_COLUMN)
 
-        self.spark.stop()
+            self.logger.info("Reading Bronze data for Silver transformations")
+            df_bronze_source = self.reader.read_parquet(ETLConfig.BRONZE_PATH)
+
+            self.logger.info("Applying Silver transformations")
+            df_silver = SilverTransformations.apply(df_bronze_source)
+            df_silver = df_silver.withColumn(ETLConfig.PARTITION_COLUMN, F.lit(processing_date))
+        
+            self.logger.info("Writing Silver data to {}".format(ETLConfig.SILVER_PATH))
+            DataWriter.write(df_silver, ETLConfig.SILVER_PATH, ETLConfig.PARTITION_COLUMN)
+
+            self.logger.info("ETL process completed successfully")
+
+        except Exception as e:
+            self.logger.exception("ETL process failed: {}".format(e))
+            raise
+
+        finally:
+            self.logger.info("Stopping Spark session")
+            self.spark.stop()
 
 
 if __name__ == "__main__":
