@@ -2,7 +2,7 @@
 Module for ETL process of client data from raw CSV to Bronze and Silver layers using PySpark.
 """
 
-from pyspark.sql import SparkSession
+from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.types import (StructType, StructField, StringType, IntegerType, TimestampType, DateType, DecimalType)
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window
@@ -88,52 +88,34 @@ def get_spark_session():
     )
 
 
-def read_csv(spark, path):
+class DataReader:
     """
-    Read a CSV file into a Spark DataFrame.
-    :param spark: SparkSession instance
-    :param path: Path to the CSV file
-    :return: DataFrame with the CSV data
+    Class for reading data from different sources into Spark DataFrames.
     """
 
-    return (
-        spark.read
-        .option("header", True)
-        .csv(path)
-    )
-
-def read_parquet(spark, path):
-    """
-    Read a Parquet file into a Spark DataFrame.
-    :param spark: SparkSession instance
-    :param path: Path to the Parquet file
-    :return: DataFrame with the Parquet data
-    """
-
-    return (
-        spark.read
-        .option("header", True)
-        .parquet(path)
-    )
+    def __init__(self, spark: SparkSession):
+        self.spark = spark
 
 
-def read_source(spark, path, source_type):
-    """
-    Read data from a specified source type into a Spark DataFrame.
-    :param spark: SparkSession instance
-    :param path: Path to the data source
-    :param source_type: Type of the data source ("parquet" or "csv")
-    :return: DataFrame with the source data
-    """
+    def read_csv(self, path: str) -> DataFrame:
+        """
+        Read a CSV file into a Spark DataFrame.
+        :param path: Path to the CSV file
+        :return: DataFrame with the CSV data
+        """
 
-    if source_type == "parquet":
-        df = read_parquet(spark, path)
-    elif source_type == "csv":
-        df = read_csv(spark, path)
-    else:
-        raise ValueError("Unsupported source type: {}".format(source_type))
-    
-    return df
+        return self.spark.read.option("header", True).csv(path)
+
+
+    def read_parquet(self, path: str) -> DataFrame:
+        """
+        Read a Parquet file into a Spark DataFrame.
+        :param path: Path to the Parquet file
+        :return: DataFrame with the Parquet data
+        """
+
+        return self.spark.read.option("header", True).parquet(path)
+
 
 
 def add_partition_column(df, processing_date):
@@ -224,21 +206,24 @@ def transform_silver(df):
 
 def main():
     print("Starting ETL process")
+
     spark = get_spark_session()
+
+    reader = DataReader(spark=spark)
 
     processing_date = datetime.now().strftime("%Y-%m-%d")
 
     empty_df = spark.createDataFrame(spark.sparkContext.emptyRDD(), TableSchemas.BRONZE_CLIENTS_SCHEMA.value)
 
     print("Reading raw data")
-    df_raw = read_csv(spark, ETLConfig.RAW_PATH)
+    df_raw = reader.read_csv(ETLConfig.RAW_PATH)
 
     df_bronze = transform_bronze(df_raw)
     df_bronze = empty_df.unionByName(df_bronze)
     df_bronze = add_partition_column(df_bronze, processing_date)
     save_data(df_bronze, "anomesdia", ETLConfig.BRONZE_PATH)
 
-    df_silver = read_source(spark, ETLConfig.BRONZE_PATH, "parquet")
+    df_silver = reader.read_parquet(ETLConfig.BRONZE_PATH)
 
     df_silver = transform_silver(df_silver)
     df_silver = add_partition_column(df_silver, processing_date)
