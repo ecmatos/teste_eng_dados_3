@@ -4,7 +4,6 @@ Module for ETL process of client data from raw CSV to Bronze and Silver layers u
 
 import os
 import logging
-from enum import Enum
 from datetime import datetime
 from pyspark.sql.window import Window
 from pyspark.sql import functions as F
@@ -35,59 +34,34 @@ class ETLConfig:
     SHUFFLE_PARTITIONS = 8
     DEFAULT_PARALLELISM = 8
 
+    PARTITION_COLUMN = "anomesdia"
 
-class TableSchemas(Enum):
+
+class SparkSessionFactory:
     """
-    Enum with table schemas for the ETL process.
-    """
-
-    BRONZE_CLIENTS_SCHEMA = StructType([
-        StructField("cod_cliente", StringType(), False),
-        StructField("nm_cliente", StringType(), True),
-        StructField("nm_pais_cliente", StringType(), True),
-        StructField("nm_cidade_cliente", StringType(), True),
-        StructField("nm_rua_cliente", StringType(), True),
-        StructField("num_casa_cliente", StringType(), True),
-        StructField("num_telefone_cliente", StringType(), True),
-        StructField("dt_nascimento_cliente", StringType(), True),
-        StructField("dt_atualizacao", StringType(), True),
-        StructField("tp_pessoa", StringType(), True),
-        StructField("vl_renda", StringType(), True)
-    ])
-
-    SILVER_CLIENTES_SCHEMA = StructType([
-        StructField("cod_cliente", StringType(), False),
-        StructField("nm_cliente", StringType(), True),
-        StructField("nm_pais_cliente", StringType(), True),
-        StructField("nm_cidade_cliente", StringType(), True),
-        StructField("nm_rua_cliente", StringType(), True),
-        StructField("num_casa_cliente", StringType(), True),
-        StructField("num_telefone_cliente", StringType(), True),
-        StructField("dt_nascimento_cliente", DateType(), True),
-        StructField("dt_atualizacao", TimestampType(), True),
-        StructField("tp_pessoa", StringType(), True),
-        StructField("vl_renda", DecimalType(15, 2), True)
-    ])
-
-
-def get_spark_session():
-    """
-    Create and return a SparkSession configured for the ETL process.
-    :return: SparkSession instance
+    Factory class for creating SparkSession instances.
     """
 
-    return (
-        SparkSession.builder
-        .appName(ETLConfig.APP_NAME)
-        .master("spark://{}:{}".format(os.environ['SPARK_MASTER_HOST'], os.environ['SPARK_MASTER_PORT']))
-        .config("spark.sql.shuffle.partitions", ETLConfig.SHUFFLE_PARTITIONS)
-        .config("spark.default.parallelism", ETLConfig.DEFAULT_PARALLELISM)
-        # Hadoop AWS
-        .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
-        .config("spark.hadoop.fs.s3a.aws.credentials.provider", "com.amazonaws.auth.DefaultAWSCredentialsProviderChain")
-        .config("spark.hadoop.fs.s3a.endpoint", "s3.amazonaws.com")
-        .getOrCreate()
-    )
+    @staticmethod
+    def create() -> SparkSession:
+        """
+        Create and return a SparkSession configured for the ETL process.
+        :return: SparkSession instance
+        """
+
+        return (
+            SparkSession.builder
+            .appName(ETLConfig.APP_NAME)
+            .master("spark://{}:{}".format(os.environ['SPARK_MASTER_HOST'], os.environ['SPARK_MASTER_PORT']))
+            .config("spark.sql.shuffle.partitions", ETLConfig.SHUFFLE_PARTITIONS)
+            .config("spark.default.parallelism", ETLConfig.DEFAULT_PARALLELISM)
+            .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
+            .config(
+                "spark.hadoop.fs.s3a.aws.credentials.provider", 
+                "com.amazonaws.auth.DefaultAWSCredentialsProviderChain"
+            )
+            .getOrCreate()
+        )
 
 
 class DataReader:
@@ -194,44 +168,37 @@ class SilverTransformations:
         )
 
 
-def add_partition_column(df, processing_date):
+class ETLOrchestrator:
     """
-    Add a partition column 'anomesdia' to the DataFrame based on the processing date.
-    :param df: DataFrame to add the partition column to
-    :param processing_date: Processing date in 'YYYYMMDD' format
-    :return: DataFrame with the added partition column
+    Class to orchestrate the ETL process.
     """
 
-    return df.withColumn("anomesdia", F.lit(processing_date))
+    def __init__(self):
+        self.spark = SparkSessionFactory.create()
+        self.reader = DataReader(spark=self.spark)
 
+    def execute(self):
+        """
+        Execute the ETL process.
+        """
 
-def main():
-    print("Starting ETL process")
+        processing_date = datetime.now().strftime("%Y-%m-%d")
 
-    spark = get_spark_session()
+        print("Reading raw data")
+        df_raw = self.reader.read_csv(ETLConfig.RAW_PATH)
 
-    reader = DataReader(spark=spark)
+        df_bronze = BronzeTransformations.apply(df_raw)
+        df_bronze = df_bronze.withColumn(ETLConfig.PARTITION_COLUMN, F.lit(processing_date))
+        DataWriter.write(df_bronze, ETLConfig.BRONZE_PATH, ETLConfig.PARTITION_COLUMN)
 
-    processing_date = datetime.now().strftime("%Y-%m-%d")
+        df_bronze_source = self.reader.read_parquet(ETLConfig.BRONZE_PATH)
 
-    empty_df = spark.createDataFrame(spark.sparkContext.emptyRDD(), TableSchemas.BRONZE_CLIENTS_SCHEMA.value)
+        df_silver = SilverTransformations.apply(df_bronze_source)
+        df_silver = df_silver.withColumn(ETLConfig.PARTITION_COLUMN, F.lit(processing_date))
+        DataWriter.write(df_silver, ETLConfig.SILVER_PATH, ETLConfig.PARTITION_COLUMN)
 
-    print("Reading raw data")
-    df_raw = reader.read_csv(ETLConfig.RAW_PATH)
-
-    df_bronze = BronzeTransformations.apply(df_raw)
-    df_bronze = empty_df.unionByName(df_bronze)
-    df_bronze = add_partition_column(df_bronze, processing_date)
-    DataWriter.write(df_bronze, ETLConfig.BRONZE_PATH, "anomesdia")
-
-    df_silver = reader.read_parquet(ETLConfig.BRONZE_PATH)
-
-    df_silver = SilverTransformations.apply(df_silver)
-    df_silver = add_partition_column(df_silver, processing_date)
-    DataWriter.write(df_silver, ETLConfig.SILVER_PATH, "anomesdia")
-
-    spark.stop()
+        self.spark.stop()
 
 
 if __name__ == "__main__":
-    main()
+    ETLOrchestrator().execute()

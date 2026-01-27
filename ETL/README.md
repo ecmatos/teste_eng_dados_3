@@ -16,6 +16,44 @@ A partir da análise exploratória do dataset, foi identificado que existem regi
 
 ## Decisões arquiteturais
 
+### Definição de schemas
+
+#### Bronze
+
+``` python
+BRONZE_SCHEMA = {
+    "cod_cliente": "string",
+    "nm_cliente": "string",
+    "nm_pais_cliente": "string",
+    "nm_cidade_cliente": "string",
+    "nm_rua_cliente": "string",
+    "num_casa_cliente": "string",
+    "num_telefone_cliente": "string",
+    "dt_nascimento_cliente": "string",
+    "dt_atualizacao": "string",
+    "tp_pessoa": "string",
+    "vl_renda": "string"
+}
+```
+
+#### Silver
+
+``` python
+SILVER_SCHEMA = {
+    "cod_cliente": "string",
+    "nm_cliente": "string",
+    "nm_pais_cliente": "string",
+    "nm_cidade_cliente": "string",
+    "nm_rua_cliente": "string",
+    "num_casa_cliente": "string",
+    "num_telefone_cliente": "string",
+    "dt_nascimento_cliente": "date",
+    "dt_atualizacao": "timestamp",
+    "tp_pessoa": "string",
+    "vl_renda": "decimal(15,2)"
+}
+```
+
 ### Particionamento de tabela
 
 Para o particionamento da tabela, a coluna **anomesdia** foi definida com o padrão **yyyy-mm-dd**, com o intuito de evitar inferência automática de tipos numéricos pelo spark e problemas de comparação durante consulta aos dados ou desenvolvimento posterior.
