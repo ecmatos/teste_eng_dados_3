@@ -78,6 +78,9 @@ class SparkSessionFactory:
 
 
 class ClientDataQualityChecks:
+    """
+    Class to perform data quality checks on Client data.
+    """
 
     PHONE_REGEX = r"^\(\d{2}\)\d{5}-\d{4}$"
 
@@ -85,7 +88,14 @@ class ClientDataQualityChecks:
         self.logger = logger
 
 
-    def check_unique_values(self, df: DataFrame, column_name: str) -> int:
+    def _check_unique_values(self, df: DataFrame, column_name: str) -> int:
+        """
+        Check for unique values in a specified column within each partition.
+        :param df: Spark DataFrame
+        :param column_name: Column name to check for uniqueness
+        :return: Count of duplicate records found
+        """
+
         self.logger.info("Checking unique values for column {} and partition {}".format(column_name, DataQualityConfig.PARTITION_COLUMN))
         invalid = (
             df.groupBy(column_name, DataQualityConfig.PARTITION_COLUMN)
@@ -95,7 +105,14 @@ class ClientDataQualityChecks:
         return invalid.count()
 
 
-    def check_empty_values(self, df: DataFrame, column_name: str) -> int:
+    def _check_empty_values(self, df: DataFrame, column_name: str) -> int:
+        """
+        Check for empty (null) values in a specified column.
+        :param df: Spark DataFrame
+        :param column_name: Column name to check for empty values
+        :return: Count of empty records found
+        """
+
         self.logger.info("Checking empty values for column {}".format(column_name))
         invalid = df.filter(
             F.col(column_name).isNull()
@@ -103,7 +120,13 @@ class ClientDataQualityChecks:
         return invalid.count()
 
 
-    def check_phone_format(self, df: DataFrame) -> int:
+    def _check_phone_format(self, df: DataFrame) -> int:
+        """
+        Check for invalid phone number formats in the num_telefone_cliente column.
+        :param df: Spark DataFrame
+        :return: Count of records with invalid phone formats
+        """
+
         self.logger.info("Checking phone format")
         invalid = df.filter(
             (~F.col("num_telefone_cliente").rlike(self.PHONE_REGEX)) &
@@ -112,7 +135,13 @@ class ClientDataQualityChecks:
         return invalid.count()
 
 
-    def check_person_type(self, df: DataFrame) -> int:
+    def _check_person_type(self, df: DataFrame) -> int:
+        """
+        Check for invalid values in the tp_pessoa column.
+        :param df: Spark DataFrame
+        :return: Count of records with invalid person types
+        """
+
         self.logger.info("Checking invalid values of tp_pessoa")
         invalid = df.filter(
             (~F.col("tp_pessoa").isin("PF", "PJ")) &
@@ -121,13 +150,25 @@ class ClientDataQualityChecks:
         return invalid.count()
 
 
-    def check_income_values(self, df: DataFrame) -> int:
+    def _check_income_values(self, df: DataFrame) -> int:
+        """
+        Check for invalid income values (negative vl_renda).
+        :param df: Spark DataFrame
+        :return: Count of records with negative income values
+        """
+
         self.logger.info("Checking invalid income values (negative vl_renda)")
         invalid = df.filter(F.col("vl_renda") < 0)
         return invalid.count()
         
-    
-    def check_temporal_consistency(self, df: DataFrame) -> int:
+
+    def _check_temporal_consistency(self, df: DataFrame) -> int:
+        """
+        Check for temporal consistency between dt_nascimento_cliente and dt_atualizacao.
+        :param df: Spark DataFrame
+        :return: Count of records with temporal inconsistencies
+        """
+
         self.logger.info("Checking temporal consistency (dt_nascimento_cliente < dt_atualizacao)")
         invalid = df.filter(
             (F.col("dt_nascimento_cliente").isNotNull()) &
@@ -136,17 +177,58 @@ class ClientDataQualityChecks:
         return invalid.count()
 
 
+    def generate_data_quality_report(self, df: DataFrame, results: dict) -> str:
+        """
+        Generate a data quality report based on the results of the checks.
+        :param df: Spark DataFrame
+        :param results: Dictionary with results of data quality checks
+        :return: JSON string of the data quality report
+        """
 
-    def generate_data_quality_report(self, df_silver: DataFrame, results: dict) -> str:
         self.logger.info("Generating data quality report")
+
+        self.logger.info("Data Quality Check Results:")
+        for column, checks in results.items():
+            for check, count in checks.items():
+                results[column][check] = "PASS" if count == 0 else "FAILED ({} records)".format(count)
 
         dq_report = {}
         dq_report['timestamp'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        dq_report['processed_records'] = df_silver.count()
+        dq_report['processed_records'] = df.count()
         dq_report['data_quality_results'] = results
 
         report = json.dumps(dq_report)
         return report
+
+
+    def apply_data_quality_checks(self, df: DataFrame, quality_checks: dict) -> dict:
+        """
+        Apply data quality checks to the DataFrame based on the provided configuration.
+        :param df: Spark DataFrame
+        :param quality_checks: Dictionary defining which checks to apply to which columns
+        :return: Dictionary with results of data quality checks
+        """
+
+        results = {}
+
+        for column, checks in quality_checks.items():
+            results[column] = {}
+            for check in checks:
+                self.logger.info("Performing check: {} on column: {}".format(check, column))
+                if check == "unique_values":
+                    results[column][check] = self._check_unique_values(df, column)
+                elif check == "empty_values":
+                    results[column][check] = self._check_empty_values(df, column)
+                elif check == "phone_format" and column == "num_telefone_cliente":
+                    results[column][check] = self._check_phone_format(df)
+                elif check == "person_type" and column == "tp_pessoa":
+                    results[column][check] = self._check_person_type(df)
+                elif check == "income_values" and column == "vl_renda":
+                    results[column][check] = self._check_income_values(df)
+                elif check == "temporal_consistency" and column == "dt_nascimento_cliente":
+                    results[column][check] = self._check_temporal_consistency(df)
+
+        return results
 
 
 def main():
@@ -155,39 +237,19 @@ def main():
 
     spark = SparkSessionFactory.create()
 
-    logger.info("Reading Silver data from {}".format(DataQualityConfig.SILVER_PATH))
-    df_silver = spark.read.parquet(DataQualityConfig.SILVER_PATH)
+    logger.info("Reading data from {}".format(DataQualityConfig.SILVER_PATH))
+    df = spark.read.parquet(DataQualityConfig.SILVER_PATH)
 
     dq = ClientDataQualityChecks(logger)
 
+    logger.info("Retrieving quality checks configuration")
     quality_checks = DataQualityConfig.QUALITY_CHECKS
 
-    dq_results = {}
+    logger.info("Applying data quality checks")
+    dq_results = dq.apply_data_quality_checks(df, quality_checks)
 
-    for column, checks in quality_checks.items():
-        dq_results[column] = {}
-        for check in checks:
-            logger.info("Performing check: {} on column: {}".format(check, column))
-            if check == "unique_values":
-                dq_results[column][check] = dq.check_unique_values(df_silver, column)
-            elif check == "empty_values":
-                dq_results[column][check] = dq.check_empty_values(df_silver, column)
-            elif check == "phone_format" and column == "num_telefone_cliente":
-                dq_results[column][check] = dq.check_phone_format(df_silver)
-            elif check == "person_type" and column == "tp_pessoa":
-                dq_results[column][check] = dq.check_person_type(df_silver)
-            elif check == "income_values" and column == "vl_renda":
-                dq_results[column][check] = dq.check_income_values(df_silver)
-            elif check == "temporal_consistency" and column == "dt_nascimento_cliente":
-                dq_results[column][check] = dq.check_temporal_consistency(df_silver)
-
-    logger.info("Data Quality Check Results:")
-    for column, checks in dq_results.items():
-        for check, count in checks.items():
-            dq_results[column][check] = "PASS" if count == 0 else "FAILED ({} records)".format(count)
-
-    data_quality_report = dq.generate_data_quality_report(df_silver, dq_results)
-    logger.info("Data Quality Report:\n{}".format(data_quality_report))
+    data_quality_report = dq.generate_data_quality_report(df, dq_results)
+    logger.info("Data Quality Report: {}".format(data_quality_report))
 
     logger.info("Data Quality process finished")
     spark.stop()
