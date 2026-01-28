@@ -177,24 +177,23 @@ class ClientDataQualityChecks:
         return invalid.count()
 
 
-    def generate_data_quality_report(self, df: DataFrame, results: dict) -> str:
+    def generate_data_quality_report(self, results: dict, total_records: int) -> str:
         """
         Generate a data quality report based on the results of the checks.
-        :param df: Spark DataFrame
         :param results: Dictionary with results of data quality checks
+        :param total_records: Total number of records processed
         :return: JSON string of the data quality report
         """
 
         self.logger.info("Generating data quality report")
 
-        self.logger.info("Data Quality Check Results:")
         for column, checks in results.items():
             for check, count in checks.items():
                 results[column][check] = "PASS" if count == 0 else "FAILED ({} records)".format(count)
 
         dq_report = {}
         dq_report['timestamp'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        dq_report['processed_records'] = df.count()
+        dq_report['processed_records'] = total_records
         dq_report['data_quality_results'] = results
 
         report = json.dumps(dq_report)
@@ -252,15 +251,19 @@ class DataQualityOrchestrator:
         logger.info("Reading data from {}".format(DataQualityConfig.SILVER_PATH))
         df = spark.read.parquet(DataQualityConfig.SILVER_PATH)
 
+        df_cached = df.cache()
+        total_records = df_cached.count()
+        logger.info("Total records to process: {}".format(total_records))
+
         dq = ClientDataQualityChecks(logger)
 
         logger.info("Retrieving quality checks configuration")
         quality_checks = DataQualityConfig.QUALITY_CHECKS
 
         logger.info("Applying data quality checks")
-        dq_results = dq.apply_data_quality_checks(df, quality_checks)
+        dq_results = dq.apply_data_quality_checks(df_cached, quality_checks)
 
-        data_quality_report = dq.generate_data_quality_report(df, dq_results)
+        data_quality_report = dq.generate_data_quality_report(dq_results, total_records)
 
         # TODO : Save report to S3 or logging system
         logger.info("Data Quality Report: {}".format(data_quality_report))
