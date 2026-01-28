@@ -5,6 +5,7 @@
 *.env
 docker-compose.env
 !.env.example
+venv/
 
 # ======== Terraform ========
 # Workspace files
@@ -60,3 +61,6 @@ silver/
 # ======== Jupyter ========
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints
+
+# ======== Python ========
+__pycache__/
