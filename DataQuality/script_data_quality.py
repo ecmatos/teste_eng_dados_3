@@ -231,29 +231,46 @@ class ClientDataQualityChecks:
         return results
 
 
-def main():
-    logger = setup_logger()
-    logger.info("Starting Data Quality process for Clients")
+class DataQualityOrchestrator:
+    """
+    Orchestrator class to run the data quality checks.
+    """
 
-    spark = SparkSessionFactory.create()
+    @staticmethod
+    def execute():
+        """
+        Execute the data quality checks process.
+        """
 
-    logger.info("Reading data from {}".format(DataQualityConfig.SILVER_PATH))
-    df = spark.read.parquet(DataQualityConfig.SILVER_PATH)
+        start_time = datetime.now()
 
-    dq = ClientDataQualityChecks(logger)
+        logger = setup_logger()
+        logger.info("Starting Data Quality process for Clients")
 
-    logger.info("Retrieving quality checks configuration")
-    quality_checks = DataQualityConfig.QUALITY_CHECKS
+        spark = SparkSessionFactory.create()
 
-    logger.info("Applying data quality checks")
-    dq_results = dq.apply_data_quality_checks(df, quality_checks)
+        logger.info("Reading data from {}".format(DataQualityConfig.SILVER_PATH))
+        df = spark.read.parquet(DataQualityConfig.SILVER_PATH)
 
-    data_quality_report = dq.generate_data_quality_report(df, dq_results)
-    logger.info("Data Quality Report: {}".format(data_quality_report))
+        dq = ClientDataQualityChecks(logger)
 
-    logger.info("Data Quality process finished")
-    spark.stop()
+        logger.info("Retrieving quality checks configuration")
+        quality_checks = DataQualityConfig.QUALITY_CHECKS
 
+        logger.info("Applying data quality checks")
+        dq_results = dq.apply_data_quality_checks(df, quality_checks)
 
+        data_quality_report = dq.generate_data_quality_report(df, dq_results)
+
+        # TODO : Save report to S3 or logging system
+        logger.info("Data Quality Report: {}".format(data_quality_report))
+
+        end_time =  datetime.now()
+        logger.info("Data Quality process duration: {}".format(end_time - start_time))
+
+        logger.info("Data Quality process finished")
+        spark.stop()
+
+        
 if __name__ == "__main__":
-    main()
+    DataQualityOrchestrator.execute()
