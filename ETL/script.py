@@ -28,6 +28,7 @@ def setup_logger() -> logging.Logger:
     
     return logging.getLogger("etl_clientes")
 
+
 class ETLConfig:
     """
     Configuration class for ETL process.

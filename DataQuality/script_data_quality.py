@@ -177,9 +177,23 @@ class ClientDataQualityChecks:
         return invalid.count()
 
 
-    def generate_data_quality_report(self, results: dict, total_records: int) -> str:
+    def _evaluate_check_result(self, results: dict) -> dict:
         """
-        Generate a data quality report based on the results of the checks.
+        Evaluate the result of a data quality check.
+        :param count: Count of invalid records found
+        :return: "PASS" if count is 0, otherwise "FAILED"
+        """
+
+        for column, checks in results.items():
+            for check, count in checks.items():
+                results[column][check] = "PASS" if count == 0 else "FAILED ({} records)".format(count)
+
+        return results
+
+
+    def build_data_quality_report(self, results: dict, total_records: int) -> str:
+        """
+        Build a data quality report based on the results of the checks.
         :param results: Dictionary with results of data quality checks
         :param total_records: Total number of records processed
         :return: JSON string of the data quality report
@@ -187,14 +201,12 @@ class ClientDataQualityChecks:
 
         self.logger.info("Generating data quality report")
 
-        for column, checks in results.items():
-            for check, count in checks.items():
-                results[column][check] = "PASS" if count == 0 else "FAILED ({} records)".format(count)
+        evaluated_results = self._evaluate_check_result(results)
 
         dq_report = {}
         dq_report['timestamp'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         dq_report['processed_records'] = total_records
-        dq_report['data_quality_results'] = results
+        dq_report['data_quality_results'] = evaluated_results
 
         report = json.dumps(dq_report)
         return report
@@ -235,45 +247,47 @@ class DataQualityOrchestrator:
     Orchestrator class to run the data quality checks.
     """
 
-    @staticmethod
-    def execute():
+    def __init__(self):
+        self.logger = setup_logger()
+
+
+    def execute(self):
         """
         Execute the data quality checks process.
         """
 
         start_time = datetime.now()
 
-        logger = setup_logger()
-        logger.info("Starting Data Quality process for Clients")
+        self.logger.info("Starting Data Quality process for Clients")
 
         spark = SparkSessionFactory.create()
 
-        logger.info("Reading data from {}".format(DataQualityConfig.SILVER_PATH))
+        self.logger.info("Reading data from {}".format(DataQualityConfig.SILVER_PATH))
         df = spark.read.parquet(DataQualityConfig.SILVER_PATH)
 
         df_cached = df.cache()
         total_records = df_cached.count()
-        logger.info("Total records to process: {}".format(total_records))
+        self.logger.info("Total records to process: {}".format(total_records))
 
-        dq = ClientDataQualityChecks(logger)
+        dq = ClientDataQualityChecks(self.logger)
 
-        logger.info("Retrieving quality checks configuration")
+        self.logger.info("Retrieving quality checks configuration")
         quality_checks = DataQualityConfig.QUALITY_CHECKS
 
-        logger.info("Applying data quality checks")
+        self.logger.info("Applying data quality checks")
         dq_results = dq.apply_data_quality_checks(df_cached, quality_checks)
 
-        data_quality_report = dq.generate_data_quality_report(dq_results, total_records)
+        data_quality_report = dq.build_data_quality_report(dq_results, total_records)
 
         # TODO : Save report to S3 or logging system
-        logger.info("Data Quality Report: {}".format(data_quality_report))
+        self.logger.info("Data Quality Report: {}".format(data_quality_report))
 
         end_time =  datetime.now()
-        logger.info("Data Quality process duration: {}".format(end_time - start_time))
+        self.logger.info("Data Quality execution time: {}".format(end_time - start_time))
 
-        logger.info("Data Quality process finished")
+        self.logger.info("Data Quality process finished")
         spark.stop()
 
         
 if __name__ == "__main__":
-    DataQualityOrchestrator.execute()
+    DataQualityOrchestrator().execute()
