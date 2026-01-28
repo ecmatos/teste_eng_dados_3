@@ -180,8 +180,8 @@ class ClientDataQualityChecks:
     def _evaluate_check_result(self, results: dict) -> dict:
         """
         Evaluate the result of a data quality check.
-        :param count: Count of invalid records found
-        :return: "PASS" if count is 0, otherwise "FAILED"
+        :param results: Dictionary with results of data quality checks
+        :return: Evaluated results with PASS/FAILED status
         """
 
         for column, checks in results.items():
