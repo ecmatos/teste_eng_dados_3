@@ -3,8 +3,17 @@
 ## Configurando o ambiente
 
 1. Atualize o arquivo docker-compose.env e preencha o valor das variáveis **AWS_ACCESS_KEY_ID** e **AWS_SECRET_ACCESS_KEY**.
-2. Execute `docker-compose up -d` no terminal.
-3. Execute `docker exec -it jupyter-notebook spark-submit /mnt/data_quality/script_data_quality.py` para rodar job Spark por meio do container.
+2. Access `InfraAsCode` folder and run:
+   1. `terraform init`
+   2. `terraform plan`
+   3. `terraform apply`
+   4. **Não se esqueça de executar os comandos abaixo após finalizar a validação (custo diário estimado em USD 0,02):**
+      1. `terraform destroy`  
+      2. `aws logs delete-log-group --log-group-name /aws-glue/jobs/error`
+      3. `aws logs delete-log-group --log-group-name /aws-glue/jobs/logs-v2`
+      4. `aws logs delete-log-group --log-group-name /aws-glue/jobs/output`
+3. Execute `docker-compose up -d` no terminal.
+4. Execute `docker exec -it jupyter-notebook spark-submit /mnt/data_quality/script_data_quality.py` para rodar job Spark por meio do container.
 
 ## Data Quality Results
 
