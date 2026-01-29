@@ -31,7 +31,7 @@ class DataQualityConfig:
 
     APP_NAME = "data_quality_clientes"
 
-    BUCKET_SILVER = "itau-de-case-dev-silver"
+    BUCKET_SILVER = "bucket-dev-silver"
     SILVER_PATH = "s3a://{}/tb_cliente".format(BUCKET_SILVER)
 
     SHUFFLE_PARTITIONS = 8
