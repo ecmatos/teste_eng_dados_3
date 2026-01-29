@@ -58,9 +58,15 @@ class ETLConfig:
 
     CLIENTS_FILE_NAME = "clientes_sinteticos.csv"
 
-    RAW_PATH = EnvironmentResolver.build_s3_path(BUCKET_RAW, CLIENTS_FILE_NAME)
-    BRONZE_PATH = EnvironmentResolver.build_s3_path(BUCKET_BRONZE, "tabela_cliente_landing")
-    SILVER_PATH = EnvironmentResolver.build_s3_path(BUCKET_SILVER, "tb_cliente")
+    BRONZE_DATABASE = "dev_datalake_bronze"
+    SILVER_DATABASE = "dev_datalake_silver"
+
+    BRONZE_TABLE = "tabela_cliente_landing"
+    SILVER_TABLE = "tb_cliente"
+
+    RAW_FILE_PATH = EnvironmentResolver.build_s3_path(BUCKET_RAW, CLIENTS_FILE_NAME)
+    BRONZE_TABLE_PATH = EnvironmentResolver.build_s3_path(BUCKET_BRONZE, BRONZE_TABLE)
+    SILVER_TABLE_PATH = EnvironmentResolver.build_s3_path(BUCKET_SILVER, SILVER_TABLE)
 
     SHUFFLE_PARTITIONS = 8
     DEFAULT_PARALLELISM = 8
@@ -210,6 +216,37 @@ class SilverTransformations:
         )
 
 
+class GlueUtils:
+    """
+    Utilities for AWS Glue Operations.
+    """
+
+    @staticmethod
+    def add_partition(
+        spark: SparkSession,
+        logger: logging.Logger,
+        database: str,
+        table: str,
+        partition_col: str,
+        partition_value: str,
+        s3_table_path: str,
+    ) -> None:
+        """
+        Add partition to a Glue table using ALTER TABLE statement.
+        """
+
+        partition_location = "{}/{}={}".format(s3_table_path, partition_col, partition_value)
+
+        query = """
+            ALTER TABLE {}.{}
+            ADD IF NOT EXISTS
+            PARTITION ({} = '{}')
+            LOCATION '{}'
+        """.format(database, table, partition_col, partition_value, partition_location)
+
+        logger.info("Adding partition {}".format(partition_location))
+        spark.sql(query)
+
 class ETLOrchestrator:
     """
     Class to orchestrate the ETL process.
@@ -231,26 +268,47 @@ class ETLOrchestrator:
             processing_date = datetime.now().strftime("%Y-%m-%d")
             self.logger.info("Processing date: {}".format(processing_date))
 
-            self.logger.info("Reading raw data from {}".format(ETLConfig.RAW_PATH))
-            df_raw = self.reader.read_csv(ETLConfig.RAW_PATH)
+            self.logger.info("Reading raw data from {}".format(ETLConfig.RAW_FILE_PATH))
+            df_raw = self.reader.read_csv(ETLConfig.RAW_FILE_PATH)
             self.logger.info("Raw record count: {}".format(df_raw.count()))
 
             self.logger.info("Applying Bronze transformations")
             df_bronze = BronzeTransformations.apply(df_raw)
             df_bronze = df_bronze.withColumn(ETLConfig.PARTITION_COLUMN, F.lit(processing_date))
 
-            self.logger.info("Writing Bronze data to {}".format(ETLConfig.BRONZE_PATH))
-            DataWriter.write(df_bronze, ETLConfig.BRONZE_PATH, ETLConfig.PARTITION_COLUMN)
+            self.logger.info("Writing Bronze data to {}".format(ETLConfig.BRONZE_TABLE_PATH))
+            DataWriter.write(df_bronze, ETLConfig.BRONZE_TABLE_PATH, ETLConfig.PARTITION_COLUMN)
 
             self.logger.info("Reading Bronze data for Silver transformations")
-            df_bronze_source = self.reader.read_parquet(ETLConfig.BRONZE_PATH)
+            df_bronze_source = self.reader.read_parquet(ETLConfig.BRONZE_TABLE_PATH)
 
             self.logger.info("Applying Silver transformations")
             df_silver = SilverTransformations.apply(df_bronze_source)
             df_silver = df_silver.withColumn(ETLConfig.PARTITION_COLUMN, F.lit(processing_date))
         
-            self.logger.info("Writing Silver data to {}".format(ETLConfig.SILVER_PATH))
-            DataWriter.write(df_silver, ETLConfig.SILVER_PATH, ETLConfig.PARTITION_COLUMN)
+            self.logger.info("Writing Silver data to {}".format(ETLConfig.SILVER_TABLE_PATH))
+            DataWriter.write(df_silver, ETLConfig.SILVER_TABLE_PATH, ETLConfig.PARTITION_COLUMN)
+
+            if EnvironmentResolver.is_glue():
+                GlueUtils.add_partition(
+                    spark=self.spark,
+                    logger=self.logger,
+                    database=ETLConfig.BRONZE_DATABASE,
+                    table=ETLConfig.BRONZE_TABLE,
+                    partition_col=ETLConfig.PARTITION_COLUMN,
+                    partition_value=processing_date,
+                    s3_table_path=ETLConfig.BRONZE_TABLE_PATH
+                )
+
+                GlueUtils.add_partition(
+                    spark=self.spark,
+                    logger=self.logger,
+                    database=ETLConfig.SILVER_DATABASE,
+                    table=ETLConfig.SILVER_TABLE,
+                    partition_col=ETLConfig.PARTITION_COLUMN,
+                    partition_value=processing_date,
+                    s3_table_path=ETLConfig.SILVER_TABLE_PATH
+                )
 
             self.logger.info("ETL process completed successfully")
 
