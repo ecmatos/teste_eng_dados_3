@@ -9,11 +9,11 @@
    3. `terraform apply`
 3. Execute `docker-compose up -d` no terminal.
 4. Execute `docker exec -it jupyter-notebook spark-submit /mnt/etl/script.py` para rodar job Spark por meio do container.
-5. **Não se esqueça de executar os comandos abaixo após finalizar a validação (custo diário estimado em USD 0,02):**
+5. **Não se esqueça de executar os comandos abaixo (no terminal) após finalizar a validação (custo diário estimado em USD 0,02):**
    1. `terraform destroy`  
-   1. `aws logs delete-log-group --log-group-name /aws-glue/jobs/error`
-   2. `aws logs delete-log-group --log-group-name /aws-glue/jobs/logs-v2`
-   3. `aws logs delete-log-group --log-group-name /aws-glue/jobs/output`
+   2. `aws logs delete-log-group --log-group-name /aws-glue/jobs/error`
+   3. `aws logs delete-log-group --log-group-name /aws-glue/jobs/logs-v2`
+   4. `aws logs delete-log-group --log-group-name /aws-glue/jobs/output`
 
 ## Análise inicial da solução
 
