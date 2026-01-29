@@ -17,6 +17,7 @@ services:
       - 8888:8888
     volumes:
       - ./datasets:/mnt/notebooks
+      - ./ETL:/mnt/etl
 
   spark-master:
     hostname: spark-master
