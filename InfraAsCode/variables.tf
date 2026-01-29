@@ -5,7 +5,7 @@ variable "aws_region" {
 
 variable "project_name" {
   type    = string
-  default = "itau-de-case"
+  default = "teste_eng_dados"
 }
 
 variable "environment" {

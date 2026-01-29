@@ -1,26 +1,26 @@
 resource "aws_s3_bucket" "raw" {
-  bucket = "${var.project_name}-${var.environment}-raw"
+  bucket = "bucket-${var.environment}-raw"
   
   # Only for development purposes
   force_destroy = true
 }
 
 resource "aws_s3_bucket" "bronze" {
-  bucket = "${var.project_name}-${var.environment}-bronze"
+  bucket = "bucket-${var.environment}-bronze"
   
   # Only for development purposes
   force_destroy = true
 }
 
 resource "aws_s3_bucket" "silver" {
-  bucket = "${var.project_name}-${var.environment}-silver"
+  bucket = "bucket-${var.environment}-silver"
 
   # Only for development purposes
   force_destroy = true
 }
 
 resource "aws_s3_bucket" "gold" {
-  bucket = "${var.project_name}-${var.environment}-gold"
+  bucket = "bucket-${var.environment}-gold"
 
   # Only for development purposes
   force_destroy = true
@@ -35,4 +35,15 @@ resource "aws_s3_object" "clientes_raw_csv" {
   content_type = "text/csv"
 
   etag = filemd5("${path.module}/../datasets/clientes_sinteticos.csv")
+}
+
+resource "aws_s3_object" "glue_etl_script" {
+  bucket = aws_s3_bucket.raw.id
+  key    = "scripts/etl_clientes.py"
+
+  source = "${path.module}/../ETL/script.py"
+
+  content_type = "text/x-python"
+
+  etag = filemd5("${path.module}/../ETL/script.py")
 }
