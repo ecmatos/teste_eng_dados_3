@@ -1,3 +1,5 @@
+/* ----- IAM ROLE ----- */
+
 resource "aws_iam_role" "glue_job_role" {
   name = "${var.project_name}_${var.environment}_glue_job_role"
 
@@ -20,6 +22,8 @@ resource "aws_iam_role" "glue_job_role" {
   }
 }
 
+/* ----- IAM POLICY ----- */
+
 resource "aws_iam_role_policy" "glue_job_policy" {
   role = aws_iam_role.glue_job_role.id
 
@@ -34,12 +38,12 @@ resource "aws_iam_role_policy" "glue_job_policy" {
           "s3:ListBucket"
         ]
         Resource = [
-          aws_s3_bucket.raw.arn,
-          "${aws_s3_bucket.raw.arn}/*",
-          aws_s3_bucket.bronze.arn,
-          "${aws_s3_bucket.bronze.arn}/*",
-          aws_s3_bucket.silver.arn,
-          "${aws_s3_bucket.silver.arn}/*"
+          var.raw_bucket_arn,
+          "${var.raw_bucket_arn}/*",
+          var.bronze_bucket_arn,
+          "${var.bronze_bucket_arn}/*",
+          var.silver_bucket_arn,
+          "${var.silver_bucket_arn}/*"
         ]
       },
       {
