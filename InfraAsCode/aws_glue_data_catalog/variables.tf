@@ -18,11 +18,11 @@ variable "environment" {
 /*----- RESOURCE VARIABLES ----- */
 
 variable "bronze_bucket_name" {
-  type = string
+  type        = string
   description = "Bronze bucket name"
 }
 
 variable "silver_bucket_name" {
-  type = string
+  type        = string
   description = "Silver bucket name"
 }

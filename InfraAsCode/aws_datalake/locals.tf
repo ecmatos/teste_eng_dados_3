@@ -1,3 +1,3 @@
 locals {
-    datalake_prefix = "bucket-${var.environment}"
+  datalake_prefix = "bucket-${var.environment}"
 }

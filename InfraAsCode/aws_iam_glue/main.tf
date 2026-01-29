@@ -16,10 +16,7 @@ resource "aws_iam_role" "glue_job_role" {
     ]
   })
 
-  tags = {
-    projeto = var.project_name
-    environment = var.environment
-  }
+  tags = local.tags
 }
 
 /* ----- IAM POLICY ----- */

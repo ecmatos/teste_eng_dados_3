@@ -18,16 +18,16 @@ variable "environment" {
 /*----- RESOURCE VARIABLES ----- */
 
 variable "glue_role_arn" {
-  type = string
+  type        = string
   description = "ARN of the Glue IAM Role"
 }
 
 variable "raw_bucket_id" {
-  type = string
+  type        = string
   description = "Id of the raw S3 bucket"
 }
 
 variable "raw_bucket_name" {
-  type = string
+  type        = string
   description = "Name of the raw S3 bucket"
 }

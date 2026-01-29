@@ -13,11 +13,10 @@ resource "aws_glue_catalog_database" "silver" {
 resource "aws_glue_catalog_table" "bronze_clientes" {
   name          = "tabela_cliente_landing"
   database_name = aws_glue_catalog_database.bronze.name
-  
   table_type    = "EXTERNAL_TABLE"
 
   parameters = {
-    EXTERNAL = "TRUE"
+    EXTERNAL       = "TRUE"
     classification = "parquet"
   }
 
@@ -95,11 +94,10 @@ resource "aws_glue_catalog_table" "bronze_clientes" {
 resource "aws_glue_catalog_table" "silver_clientes" {
   name          = "tb_cliente"
   database_name = aws_glue_catalog_database.silver.name
-  
   table_type    = "EXTERNAL_TABLE"
 
   parameters = {
-    EXTERNAL = "TRUE"
+    EXTERNAL       = "TRUE"
     classification = "parquet"
   }
 
@@ -148,13 +146,13 @@ resource "aws_glue_catalog_table" "silver_clientes" {
     }
 
     columns {
-    name = "dt_nascimento_cliente"
-    type = "date"
+      name = "dt_nascimento_cliente"
+      type = "date"
     }
 
     columns {
-    name = "dt_atualizacao"
-    type = "timestamp"
+      name = "dt_atualizacao"
+      type = "timestamp"
     }
 
     columns {
@@ -163,8 +161,8 @@ resource "aws_glue_catalog_table" "silver_clientes" {
     }
 
     columns {
-    name = "vl_renda"
-    type = "decimal(15,2)"
+      name = "vl_renda"
+      type = "decimal(15,2)"
     }
   }
 
