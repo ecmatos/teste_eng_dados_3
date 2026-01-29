@@ -4,8 +4,7 @@
 
 1. Atualize o arquivo docker-compose.env e preencha o valor das variáveis **AWS_ACCESS_KEY_ID** e **AWS_SECRET_ACCESS_KEY**.
 2. Execute `docker-compose up -d` no terminal.
-3. Execute `cp .\ETL\script.py .\datasets\script.py` para copiar o script de ETL para o volume compartilhado do container.
-4. Execute `docker exec -it jupyter-notebook spark-submit /mnt/notebooks/script.py` para rodar um job Spark por meio do container.
+3. Execute `docker exec -it jupyter-notebook spark-submit /mnt/etl/script.py` para rodar job Spark por meio do container.
 
 ## Análise inicial da solução
 
