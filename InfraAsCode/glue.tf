@@ -190,13 +190,12 @@ resource "aws_glue_job" "clientes_etl" {
   default_arguments = {
     "--job-language"                     = "python"
     "--enable-glue-datacatalog"          = "true"
-    "--continuous-log-logGroup"          = "/aws-glue/jobs"
     "--enable-continuous-cloudwatch-log" = "true"
     "--enable-continuous-log-filter" = "true"
     "--enable-metrics"                  = "true"
     "--enable-spark-ui" = "true"
-    "--TempDir" = "${aws_s3_bucket.raw.bucket}/spark_temp/"
-    "--spark-event-logs-path" = "${aws_s3_bucket.raw.bucket}/spark_logs/"
+    "--TempDir" = "s3://${aws_s3_bucket.raw.bucket}/spark_temp/"
+    "--spark-event-logs-path" = "s3://${aws_s3_bucket.raw.bucket}/spark_logs/"
   }
 
 
