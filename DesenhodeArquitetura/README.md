@@ -19,6 +19,7 @@ Dado este contexto e considerando a premissa de que o banco de dados MySQL seja 
   * **Bronze layer:** Armazena dados brutos do processo de CDC e possíveis outros arquivos.
   * **Silver layer:** Contém dados tratados, normalizados e com validações de negócio aplicadas.
   * **Gold layer:** Armazena consultas analíticas, métricas e dados agregados  prontos para serem consumidos.
+* **AWS EventBridge:** Serviço utilizado para o agendamento e disparo do Glue Job.
 * **AWS Glue Jobs:** São os recursos responsáveis por executar o processamento dos dados com Spark entre as diferentes camadas do Data Lake.
 * **AWS Glud Data Catalog:** Armazena os metadados que permite a estruturação lógica do banco de dados e schema de cada uma das tabelas e partições físicas armazenadas no S3.
 * **AWS Lakeformation:** Responsável pela governança e controle de acesso de usuários a nível de banco de dados, tablas e/ou colunas.
