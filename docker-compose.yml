@@ -18,6 +18,7 @@ services:
     volumes:
       - ./datasets:/mnt/notebooks
       - ./ETL:/mnt/etl
+      - ./DataQuality:/mnt/data_quality
 
   spark-master:
     hostname: spark-master
