@@ -29,6 +29,22 @@ def setup_logger() -> logging.Logger:
     return logging.getLogger("etl_clientes")
 
 
+class EnvironmentResolver:
+
+
+    @staticmethod
+    def is_glue() -> bool:
+        return os.getenv("GLUE_PYTHON_VERSION") is not None
+
+    
+    @staticmethod
+    def build_s3_path(bucket: str, key: str) -> str:
+        if EnvironmentResolver.is_glue():
+            return "s3://{}/{}".format(bucket, key)
+        
+        return "s3a://{}/{}".format(bucket, key)
+
+
 class ETLConfig:
     """
     Configuration class for ETL process.
@@ -36,15 +52,15 @@ class ETLConfig:
 
     APP_NAME = "etl_clientes"
 
-    BUCKET_RAW = "itau-de-case-dev-raw"
-    BUCKET_BRONZE = "itau-de-case-dev-bronze"
-    BUCKET_SILVER = "itau-de-case-dev-silver"
+    BUCKET_RAW = "bucket-dev-raw"
+    BUCKET_BRONZE = "bucket-dev-bronze"
+    BUCKET_SILVER = "bucket-dev-silver"
 
     CLIENTS_FILE_NAME = "clientes_sinteticos.csv"
 
-    RAW_PATH = "s3a://{}/{}".format(BUCKET_RAW, CLIENTS_FILE_NAME)
-    BRONZE_PATH = "s3a://{}/tabela_cliente_landing".format(BUCKET_BRONZE)
-    SILVER_PATH = "s3a://{}/tb_cliente".format(BUCKET_SILVER)
+    RAW_PATH = EnvironmentResolver.build_s3_path(BUCKET_RAW, CLIENTS_FILE_NAME)
+    BRONZE_PATH = EnvironmentResolver.build_s3_path(BUCKET_BRONZE, "tabela_cliente_landing")
+    SILVER_PATH = EnvironmentResolver.build_s3_path(BUCKET_SILVER, "tb_cliente")
 
     SHUFFLE_PARTITIONS = 8
     DEFAULT_PARALLELISM = 8
@@ -64,19 +80,30 @@ class SparkSessionFactory:
         :return: SparkSession instance
         """
 
-        return (
-            SparkSession.builder
-            .appName(ETLConfig.APP_NAME)
-            .master("spark://{}:{}".format(os.environ['SPARK_MASTER_HOST'], os.environ['SPARK_MASTER_PORT']))
-            .config("spark.sql.shuffle.partitions", ETLConfig.SHUFFLE_PARTITIONS)
-            .config("spark.default.parallelism", ETLConfig.DEFAULT_PARALLELISM)
-            .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
+        builder = (
+            SparkSession.builder \
+            .appName(ETLConfig.APP_NAME) \
+            .config("spark.sql.shuffle.partitions", ETLConfig.SHUFFLE_PARTITIONS) \
+            .config("spark.default.parallelism", ETLConfig.DEFAULT_PARALLELISM) \
+            .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
             .config(
                 "spark.hadoop.fs.s3a.aws.credentials.provider", 
                 "com.amazonaws.auth.DefaultAWSCredentialsProviderChain"
             )
-            .getOrCreate()
         )
+
+        if EnvironmentResolver.is_glue():
+            return builder.getOrCreate()
+
+        spark_host = os.getenv("SPARK_MASTER_HOST")
+        spark_port = os.getenv("SPARK_MASTER_PORT")
+
+        if spark_host and spark_port:
+            builder = builder.master("spark://{}:{}".format(spark_host, spark_port))
+        else:
+            builder = builder.master("local[*]")
+
+        return builder.getOrCreate()
 
 
 class DataReader:
